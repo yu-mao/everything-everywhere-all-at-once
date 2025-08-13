@@ -1,3 +1,5 @@
+// modified by Jiayao 
+
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -117,6 +119,9 @@ namespace PresentFutures.XRAI.Florence
 
     public class Florence2Controller : MonoBehaviour
     {
+        // [SerializeField] private Camera cameraInUse;
+        [SerializeField] private GameObject placeholderObj;
+        
         [Header("NVIDIA API Settings")]
         [Tooltip("Your NVIDIA API Key")]
         [SerializeField] private ApiConfig apiConfiguration;
@@ -372,7 +377,14 @@ namespace PresentFutures.XRAI.Florence
             _detectionResults.Clear();
             
             Debug.Log($"<color=green>Found {entities.Bboxes.Count} detections. Processing for display...</color>");
-
+            
+            // List<string> possiblyPointedLabels = new List<string>();
+            // Vector3 objScreenPos = cameraInUse.WorldToScreenPoint(placeholderObj.transform.position);
+            //
+            // Option B
+            // Debug.Log($"======= placeholderObjScreenPos: {objScreenPos}");
+            // Debug.Log($"======= placeholderObjScreenPos projected to screen: {objScreenPos.x / Screen.width}, {objScreenPos.y / Screen.height}");
+            
             for (int i = 0; i < entities.Bboxes.Count; i++)
             {
                 var bbox = entities.Bboxes[i];
@@ -381,6 +393,9 @@ namespace PresentFutures.XRAI.Florence
                 // Florence-2 bounding box format is [x1, y1, x2, y2] (top-left & bottom-right)
                 float width = bbox[2] - x;
                 float height = bbox[3] - y;
+                
+                // Option B:
+                // Debug.Log($"======= BBOX x1: {x}, y1: {y}, x2: {bbox[2]}, y2: {bbox[3]} ======= label: {entities.Labels[i]}======");
                 
                 // Add detection result for UI usage
                 _detectionResults.Add(new DetectionResult
@@ -475,7 +490,9 @@ namespace PresentFutures.XRAI.Florence
             RectTransform imgRect = resultImage.rectTransform;
             float scaleX = imgRect.rect.width / resultImage.texture.width;
             float scaleY = imgRect.rect.height / resultImage.texture.height;
-
+            
+            Debug.Log($"~~~~~~ placeholder obj pos: {placeholderObj.transform.position}");
+            
             foreach (var det in _detectionResults)
             {
                 if (boundingBoxPrefab == null)
@@ -487,7 +504,6 @@ namespace PresentFutures.XRAI.Florence
                 float y = det.BoundingBox.y * scaleY;
                 float w = det.BoundingBox.width * scaleX;
                 float h = det.BoundingBox.height * scaleY;
-                
                 if (anchorMode == FlorenceAnchorMode.BoundingBox2D || anchorMode == FlorenceAnchorMode.Both)
                 {
                     GameObject boxGO = Instantiate(boundingBoxPrefab, boundingBoxContainer);
@@ -517,15 +533,20 @@ namespace PresentFutures.XRAI.Florence
 
                     if (environmentRaycastManager.Raycast(ray, out EnvironmentRaycastHit hitInfo))
                     {
-                        GameObject anchorGo = Instantiate(spatialAnchorPrefab);
-                        anchorGo.transform.SetPositionAndRotation(
-                            hitInfo.point,
-                            Quaternion.LookRotation(hitInfo.normal, Vector3.up));
-                        _spawnedAnchors.Add(anchorGo);
-                        anchorGo.GetComponentInChildren<TMPro.TextMeshProUGUI>().text = det.Label;
+                        if (Vector3.Distance(hitInfo.point, placeholderObj.transform.position) < 0.15f)
+                        {
+                            GameObject anchorGo = Instantiate(spatialAnchorPrefab);
+                            anchorGo.transform.SetPositionAndRotation(
+                                hitInfo.point,
+                                Quaternion.LookRotation(hitInfo.normal, Vector3.up));
+                            _spawnedAnchors.Add(anchorGo);
+                            anchorGo.GetComponentInChildren<TMPro.TextMeshProUGUI>().text = det.Label;
+                        
+                            Debug.Log($"~~~~~~ label: {det.Label} | distance to placeholder obj: {Vector3.Distance(hitInfo.point, placeholderObj.transform.position)} " +
+                                      $"| hit point coords: {hitInfo.point:F1}");
+                        }
                     }
                 }
-
                 yield return new WaitForSeconds(0.1f);
             }
         }
