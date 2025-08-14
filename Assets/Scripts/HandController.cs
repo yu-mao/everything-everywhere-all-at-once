@@ -21,7 +21,7 @@ public class HandController : MonoBehaviour
 
     private Vector3 GetIndexFingerTipPos()
     {
-        var indexTip = rightHandSkeleton.Bones[(int)OVRSkeleton.BoneId.XRHand_IndexTip];
+        var indexTip = rightHandSkeleton.Bones[(int)OVRSkeleton.BoneId.Hand_IndexTip];
         return indexTip.Transform.position;
     }
 
@@ -29,7 +29,12 @@ public class HandController : MonoBehaviour
     {
         if (rightHand.IsTracked && rightHandSkeleton.IsInitialized)
         {
+            indexFingerTipVisual.SetActive(true);
             indexFingerTipVisual.transform.position = GetIndexFingerTipPos();
+        }
+        else
+        {
+            indexFingerTipVisual.SetActive(false);
         }
     }
 }
