@@ -6,7 +6,7 @@ public class TaskCompletionStatus
 {
     [PrimaryKey, AutoIncrement]
     public int Id { get; set; }
-    public List<List<string>> CompletedObjectLabels { get; set; }
+    public List<string> CompletedObjectLabels { get; set; }
     public int NumOfAllowedMistakes { get; set; }
 }
 

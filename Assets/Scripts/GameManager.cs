@@ -19,18 +19,31 @@ public class GameManager : MonoBehaviour
     [Header("AI Reference")]
     [SerializeField] private Florence2Controller aiController;
     [SerializeField] private List<string> poolOfLabels;
+
+    [Header("UI")]
+    [SerializeField] private GameObject correctIcon;
+    [SerializeField] private GameObject wrongIcon;
+    [SerializeField] private GameObject unclearIcon;
+    [SerializeField] private GameObject riddleDisplay;
     
     // Hard-coded riddles
-    private string riddle = "A monitor, a vase, a flower";
+    private string riddle = "I can show you worlds without a door,\n" +
+        "I hold a bloom but not on the floor.\n" +
+        "I sit and wait on a table or stand—\n" +
+        "What am I, held by your hand?";
 
     // Hard-coded room objects associated to each riddles
-    private List<List<string>> targetObjectLabels = new List<List<string>>
+    private List<string> targetObjectLabels = new List<string>
     {
-        new List<string> { "monitor", "television"},
-        new List<string> { "vase" },
-        new List<string> { "flower" }
+        "television", "vase" , "flower"
     };
+
+    private List<string> completedObjectLabels = new List<string>();
     
+    public void ToggleRiddleDisplay()
+    {
+        riddleDisplay.SetActive(!riddleDisplay.activeSelf);
+    }
     
     private void Awake()
     {
@@ -45,8 +58,11 @@ public class GameManager : MonoBehaviour
         
         try
         {
-            aiController.OnSelectedObjectsRecognized += GetSelectedObjectsLabels;
+            correctIcon.SetActive(false);
+            wrongIcon.SetActive(false);
             riddleText.text = riddle;
+            
+            aiController.OnSelectedObjectsRecognized += GetSelectedObjectsLabels;
         }
         catch (Exception ex)
         {
@@ -55,9 +71,44 @@ public class GameManager : MonoBehaviour
     }
 
     
-    private void GetSelectedObjectsLabels(List<string> labels)
+    private void GetSelectedObjectsLabels(List<string> recognizedLabels)
     {
-        Debug.Log($"~~~~~~ label count: {labels.Count}");
+        if (recognizedLabels.Count == 0) GetNonLabel();
+        
+        foreach (var targetLabel in targetObjectLabels)
+        {
+            if (recognizedLabels.Contains(targetLabel))
+            {
+                StartCoroutine(GetACorrectLabel());
+                targetObjectLabels.Remove(targetLabel);
+                
+                completedObjectLabels.Add(targetLabel);
+                
+                return;
+            }
+        }
+        StartCoroutine(GetAWrongLabel());
+    }
+
+    private IEnumerator GetNonLabel()
+    {
+        unclearIcon.SetActive(true);
+        yield return new WaitForSeconds(1.5f);
+        unclearIcon.SetActive(false);
+    }
+    
+    private IEnumerator GetACorrectLabel()
+    {
+        correctIcon.SetActive(true);
+        yield return new WaitForSeconds(2.5f);
+        correctIcon.SetActive(false);
+    }
+
+    private IEnumerator GetAWrongLabel()
+    {
+        wrongIcon.SetActive(true);
+        yield return new WaitForSeconds(2.5f);
+        wrongIcon.SetActive(false);
     }
 }
 
