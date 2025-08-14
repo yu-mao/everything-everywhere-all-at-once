@@ -119,8 +119,12 @@ namespace PresentFutures.XRAI.Florence
 
     public class Florence2Controller : MonoBehaviour
     {
-        // [SerializeField] private Camera cameraInUse;
-        [SerializeField] private GameObject placeholderObj;
+        [Header("Room Object Selection")]
+        [SerializeField] private HandController handController;
+        [SerializeField] private float fingerTipToObjectDistanceThreshold = 0.15f;
+        private Vector3 indexFingerTipPos;
+        public event Action<List<string>> OnSelectedObjectsRecognized;
+        private List<string> selectedObjectsLabels = new List<string>();
         
         [Header("NVIDIA API Settings")]
         [Tooltip("Your NVIDIA API Key")]
@@ -186,6 +190,24 @@ namespace PresentFutures.XRAI.Florence
             { Florence2Task.OCR, "<OCR>" },
             { Florence2Task.OCRWithRegion, "<OCR_WITH_REGION>" }
         };
+
+        private void Awake()
+        {
+            if (handController != null)
+            {
+                handController.OnThumbUpRecognized += TriggerObjectDetection;
+            }
+            else
+            {
+                Debug.LogError("No hand controller assigned.");
+            }
+        }
+
+        private void TriggerObjectDetection(Vector3 pos)
+        {
+            SendRequest();
+            indexFingerTipPos = pos;
+        }
         
         [Button]
         public void SendRequest()
@@ -269,121 +291,114 @@ namespace PresentFutures.XRAI.Florence
             }
         }
 
-    // Standard .NET HttpClient for full control over the request.
-    private async Task<byte[]> SendRequestWithHttpClientAsync(string jsonPayload)
-    {
-        // Use 'using' to ensure the client is disposed of correctly
-        using (var client = new HttpClient())
+        // Standard .NET HttpClient for full control over the request.
+        private async Task<byte[]> SendRequestWithHttpClientAsync(string jsonPayload)
         {
-            // Create the request message
-            var requestMessage = new HttpRequestMessage(HttpMethod.Post, ApiUrl);
-            
-            // Add headers with full control. No extra headers will be added.
-            requestMessage.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiConfiguration.apiKey);
-            requestMessage.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/zip"));
-
-            // Add the JSON payload to the request body
-            requestMessage.Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
-
-            // Send the request asynchronously and wait for the response
-            var response = await client.SendAsync(requestMessage);
-
-            if (response.IsSuccessStatusCode)
+            // Use 'using' to ensure the client is disposed of correctly
+            using (var client = new HttpClient())
             {
-                // If successful, read the response content as a byte array
-                return await response.Content.ReadAsByteArrayAsync();
-            }
-            else
-            {
-                // If not successful, read the error message and log it
-                string errorContent = await response.Content.ReadAsStringAsync();
-                Debug.LogError($"Error: {response.StatusCode}\nResponse: {errorContent}");
-                // Return null to indicate failure
-                return null;
-            }
-        }
-    }
-        
-    private void ProcessZipResponse(byte[] zipData)
-    {
-        try
-        {
-            // Log to confirm the method is called
-            Debug.Log($"<color=orange>ProcessZipResponse called with {zipData.Length} bytes of data.</color>");
+                // Create the request message
+                var requestMessage = new HttpRequestMessage(HttpMethod.Post, ApiUrl);
+                
+                // Add headers with full control. No extra headers will be added.
+                requestMessage.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiConfiguration.apiKey);
+                requestMessage.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("application/zip"));
 
-            using (var memoryStream = new MemoryStream(zipData))
-            using (var archive = new ZipArchive(memoryStream, ZipArchiveMode.Read))
-            {
-                // Log to check the number of files
-                Debug.Log($"<color=yellow>Archive contains {archive.Entries.Count} file(s).</color>");
+                // Add the JSON payload to the request body
+                requestMessage.Content = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
 
-                foreach (ZipArchiveEntry entry in archive.Entries)
+                // Send the request asynchronously and wait for the response
+                var response = await client.SendAsync(requestMessage);
+
+                if (response.IsSuccessStatusCode)
                 {
-                    // Log the exact name of every file in the ZIP
-                    Debug.Log($"<color=cyan>Found file in zip with full name: '{entry.FullName}'</color>");
-                    
-                    if (entry.FullName.EndsWith(".response"))
-                    {
-                        Debug.Log($"<color=green>Found a .response file! Processing as JSON...</color>");
-
-                        using (var reader = new StreamReader(entry.Open()))
-                        {
-                            string jsonContent = reader.ReadToEnd();
-                            Debug.Log($"<color=cyan>--- RECEIVED JSON ---</color>\n{jsonContent}");
-
-                            Florence2Response response = JsonConvert.DeserializeObject<Florence2Response>(jsonContent);
-
-                            if (response == null)
-                            {
-                                Debug.LogError("JSON Deserialization failed. The response object is null.");
-                                if (statusText != null) statusText.text = "Error: Failed to parse JSON.";
-                                return;
-                            }
-
-                            if (resultText != null)
-                            {
-                                resultText.text = $"ID: {response.Id}\n";
-                                if (response.Choices != null && response.Choices.Count > 0 && response.Choices[0]?.Message?.Entities?.Labels != null)
-                                    resultText.text += $"Found {response.Choices[0].Message.Entities.Labels.Count} objects.\n";
-                                else
-                                    resultText.text += "No objects found in response.\n";
-                                resultText.text += $"Usage: {response.Usage.TotalTokens} tokens.";
-                            }
-
-                            if (response.Choices != null && response.Choices.Count > 0 && response.Choices[0]?.Message?.Entities != null)
-                                DisplayObjectDetectionResults(response.Choices[0].Message.Entities);
-                            else
-                                Debug.LogWarning("The 'entities' object is missing from the JSON response. No bounding boxes to display.");
-                        }
-                    }
-                    else if (entry.FullName.EndsWith(".png"))
-                    {
-                        // Optional: You could also handle the overlay.png here if you wanted.
-                        Debug.Log("Found overlay.png, skipping for now.");
-                    }
+                    // If successful, read the response content as a byte array
+                    return await response.Content.ReadAsByteArrayAsync();
+                }
+                else
+                {
+                    // If not successful, read the error message and log it
+                    string errorContent = await response.Content.ReadAsStringAsync();
+                    Debug.LogError($"Error: {response.StatusCode}\nResponse: {errorContent}");
+                    // Return null to indicate failure
+                    return null;
                 }
             }
-            if (statusText != null) statusText.text = "Done!";
         }
-        catch (Exception e)
+            
+        private void ProcessZipResponse(byte[] zipData)
         {
-            if (statusText != null) statusText.text = "Error: Failed to read response.";
-            Debug.LogError($"Failed to process ZIP response: {e.Message}\n{e.StackTrace}");
+            try
+            {
+                // Log to confirm the method is called
+                Debug.Log($"<color=orange>ProcessZipResponse called with {zipData.Length} bytes of data.</color>");
+
+                using (var memoryStream = new MemoryStream(zipData))
+                using (var archive = new ZipArchive(memoryStream, ZipArchiveMode.Read))
+                {
+                    // Log to check the number of files
+                    Debug.Log($"<color=yellow>Archive contains {archive.Entries.Count} file(s).</color>");
+
+                    foreach (ZipArchiveEntry entry in archive.Entries)
+                    {
+                        // Log the exact name of every file in the ZIP
+                        Debug.Log($"<color=cyan>Found file in zip with full name: '{entry.FullName}'</color>");
+                        
+                        if (entry.FullName.EndsWith(".response"))
+                        {
+                            Debug.Log($"<color=green>Found a .response file! Processing as JSON...</color>");
+
+                            using (var reader = new StreamReader(entry.Open()))
+                            {
+                                string jsonContent = reader.ReadToEnd();
+                                Debug.Log($"<color=cyan>--- RECEIVED JSON ---</color>\n{jsonContent}");
+
+                                Florence2Response response = JsonConvert.DeserializeObject<Florence2Response>(jsonContent);
+
+                                if (response == null)
+                                {
+                                    Debug.LogError("JSON Deserialization failed. The response object is null.");
+                                    if (statusText != null) statusText.text = "Error: Failed to parse JSON.";
+                                    return;
+                                }
+
+                                if (resultText != null)
+                                {
+                                    resultText.text = $"ID: {response.Id}\n";
+                                    if (response.Choices != null && response.Choices.Count > 0 && response.Choices[0]?.Message?.Entities?.Labels != null)
+                                        resultText.text += $"Found {response.Choices[0].Message.Entities.Labels.Count} objects.\n";
+                                    else
+                                        resultText.text += "No objects found in response.\n";
+                                    resultText.text += $"Usage: {response.Usage.TotalTokens} tokens.";
+                                }
+
+                                if (response.Choices != null && response.Choices.Count > 0 && response.Choices[0]?.Message?.Entities != null)
+                                    DisplayObjectDetectionResults(response.Choices[0].Message.Entities);
+                                else
+                                    Debug.LogWarning("The 'entities' object is missing from the JSON response. No bounding boxes to display.");
+                            }
+                        }
+                        else if (entry.FullName.EndsWith(".png"))
+                        {
+                            // Optional: You could also handle the overlay.png here if you wanted.
+                            Debug.Log("Found overlay.png, skipping for now.");
+                        }
+                    }
+                }
+                if (statusText != null) statusText.text = "Done!";
+            }
+            catch (Exception e)
+            {
+                if (statusText != null) statusText.text = "Error: Failed to read response.";
+                Debug.LogError($"Failed to process ZIP response: {e.Message}\n{e.StackTrace}");
+            }
         }
-    }
 
         private void DisplayObjectDetectionResults(Entities entities)
         {
             _detectionResults.Clear();
             
             Debug.Log($"<color=green>Found {entities.Bboxes.Count} detections. Processing for display...</color>");
-            
-            // List<string> possiblyPointedLabels = new List<string>();
-            // Vector3 objScreenPos = cameraInUse.WorldToScreenPoint(placeholderObj.transform.position);
-            //
-            // Option B
-            // Debug.Log($"======= placeholderObjScreenPos: {objScreenPos}");
-            // Debug.Log($"======= placeholderObjScreenPos projected to screen: {objScreenPos.x / Screen.width}, {objScreenPos.y / Screen.height}");
             
             for (int i = 0; i < entities.Bboxes.Count; i++)
             {
@@ -393,9 +408,6 @@ namespace PresentFutures.XRAI.Florence
                 // Florence-2 bounding box format is [x1, y1, x2, y2] (top-left & bottom-right)
                 float width = bbox[2] - x;
                 float height = bbox[3] - y;
-                
-                // Option B:
-                // Debug.Log($"======= BBOX x1: {x}, y1: {y}, x2: {bbox[2]}, y2: {bbox[3]} ======= label: {entities.Labels[i]}======");
                 
                 // Add detection result for UI usage
                 _detectionResults.Add(new DetectionResult
@@ -486,12 +498,11 @@ namespace PresentFutures.XRAI.Florence
             }
 
             ClearBoundingBoxes();
+            selectedObjectsLabels.Clear();
 
             RectTransform imgRect = resultImage.rectTransform;
             float scaleX = imgRect.rect.width / resultImage.texture.width;
             float scaleY = imgRect.rect.height / resultImage.texture.height;
-            
-            Debug.Log($"~~~~~~ placeholder obj pos: {placeholderObj.transform.position}");
             
             foreach (var det in _detectionResults)
             {
@@ -533,7 +544,7 @@ namespace PresentFutures.XRAI.Florence
 
                     if (environmentRaycastManager.Raycast(ray, out EnvironmentRaycastHit hitInfo))
                     {
-                        if (Vector3.Distance(hitInfo.point, placeholderObj.transform.position) < 0.15f)
+                        if (Vector3.Distance(hitInfo.point, indexFingerTipPos) < fingerTipToObjectDistanceThreshold && det.Label != "person")
                         {
                             GameObject anchorGo = Instantiate(spatialAnchorPrefab);
                             anchorGo.transform.SetPositionAndRotation(
@@ -541,14 +552,17 @@ namespace PresentFutures.XRAI.Florence
                                 Quaternion.LookRotation(hitInfo.normal, Vector3.up));
                             _spawnedAnchors.Add(anchorGo);
                             anchorGo.GetComponentInChildren<TMPro.TextMeshProUGUI>().text = det.Label;
-                        
-                            Debug.Log($"~~~~~~ label: {det.Label} | distance to placeholder obj: {Vector3.Distance(hitInfo.point, placeholderObj.transform.position)} " +
-                                      $"| hit point coords: {hitInfo.point:F1}");
+                            
+                            selectedObjectsLabels.Add(det.Label);
+                            
+                            // Debug.Log($"~~~~~~ label: {det.Label} | distance to placeholder obj: {Vector3.Distance(hitInfo.point, placeholderObj.transform.position)} " +
+                            //           $"| hit point coords: {hitInfo.point:F1}");
                         }
                     }
                 }
-                yield return new WaitForSeconds(0.1f);
+                // yield return new WaitForSeconds(0.1f);
             }
+            OnSelectedObjectsRecognized?.Invoke(selectedObjectsLabels);
         }
         #endregion
 
