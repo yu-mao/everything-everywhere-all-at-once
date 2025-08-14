@@ -119,11 +119,12 @@ namespace PresentFutures.XRAI.Florence
 
     public class Florence2Controller : MonoBehaviour
     {
+        public event Action<List<string>> OnSelectedObjectsRecognized;
+        
         [Header("Room Object Selection")]
         [SerializeField] private HandController handController;
         [SerializeField] private float fingerTipToObjectDistanceThreshold = 0.15f;
         private Vector3 indexFingerTipPos;
-        public event Action<List<string>> OnSelectedObjectsRecognized;
         private List<string> selectedObjectsLabels = new List<string>();
         
         [Header("NVIDIA API Settings")]
@@ -554,9 +555,6 @@ namespace PresentFutures.XRAI.Florence
                             anchorGo.GetComponentInChildren<TMPro.TextMeshProUGUI>().text = det.Label;
                             
                             selectedObjectsLabels.Add(det.Label);
-                            
-                            // Debug.Log($"~~~~~~ label: {det.Label} | distance to placeholder obj: {Vector3.Distance(hitInfo.point, placeholderObj.transform.position)} " +
-                            //           $"| hit point coords: {hitInfo.point:F1}");
                         }
                     }
                 }
